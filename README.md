@@ -59,14 +59,13 @@ curl -X POST http://localhost:8000/api/classification \
 
 ### Backend (Render Free Web Service)
 1. Push this project to GitHub (or fork it to a new repo).
-2. Create a Render account → `New +` → **Web Service** → connect the repo.
-3. Use the following settings:
+2. Option A – quickest: import the provided `render.yaml` blueprint when creating the service (Render will prefill build/start commands and pin Python 3.11.9).
+3. Option B – manual setup via dashboard:
    - *Branch*: `main`
    - *Build Command*: `pip install -r requirements.txt`
    - *Start Command*: `PYTHONPATH=backend uvicorn app.main:app --host 0.0.0.0 --port 10000`
-   - *Environment*: autodetected; ensure Render shows Python 3.11 (runtime.txt + PYTHON_VERSION env var enforce it)
-4. Under **Environment → Add Environment Variable** set `PYTHON_VERSION=3.11.9` so Render provisions the correct interpreter.
-5. Add application environment variables:
+   - Under **Environment → Add Environment Variable** set `PYTHON_VERSION=3.11.9` so Render provisions Python 3.11.
+4. Add application environment variables:
    - `OPENAI_API_KEY` – required
    - `OPENAI_MODEL`, `OPENAI_TEMPERATURE`, `OPENAI_MAX_OUTPUT_TOKENS` (optional overrides)
    - `CORS_ALLOW_ORIGINS` – JSON list of allowed origins, e.g. `["https://antispam-demo.vercel.app", "http://localhost:5173"]`

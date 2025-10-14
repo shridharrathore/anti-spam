@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: antispam-api
+    env: python
+    pythonVersion: 3.11.9
+    buildCommand: pip install -r requirements.txt
+    startCommand: PYTHONPATH=backend uvicorn app.main:app --host 0.0.0.0 --port 10000
+    plan: free
+    envVars:
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: OPENAI_MODEL
+        value: gpt-4o-mini
+      - key: OPENAI_TEMPERATURE
+        value: "0.0"
+      - key: OPENAI_MAX_OUTPUT_TOKENS
+        value: "256"
+      - key: CORS_ALLOW_ORIGINS
+        value: '["http://localhost:5173"]'
