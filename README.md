@@ -27,6 +27,8 @@ OPENAI_TEMPERATURE=0.0           # optional
 OPENAI_MAX_OUTPUT_TOKENS=256     # optional
 ```
 
+> Render build note: pin Python to 3.11 by committing `backend/runtime.txt` with `python-3.11.9` (already in repo). This avoids pydantic-core from trying to compile for Python 3.13.
+
 The `/api/classification` endpoint depends solely on the LLM. If the key is missing or the API call fails you will receive `503 Service Unavailable`.
 
 ## Frontend Setup
@@ -62,7 +64,7 @@ curl -X POST http://localhost:8000/api/classification \
    - *Branch*: `main`
    - *Build Command*: `cd backend && pip install -r requirements.txt`
    - *Start Command*: `cd backend && PYTHONPATH=backend uvicorn app.main:app --host 0.0.0.0 --port 10000`
-   - *Environment*: Python 3.9
+   - *Environment*: autodetected; ensure Render shows Python 3.11 (runtime.txt enforces it)
 4. Add environment variables under **Settings → Environment**:
    - `OPENAI_API_KEY` – required
    - `OPENAI_MODEL`, `OPENAI_TEMPERATURE`, `OPENAI_MAX_OUTPUT_TOKENS` (optional overrides)
