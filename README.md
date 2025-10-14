@@ -27,7 +27,7 @@ OPENAI_TEMPERATURE=0.0           # optional
 OPENAI_MAX_OUTPUT_TOKENS=256     # optional
 ```
 
-> Render build note: pin Python to 3.11 by committing `backend/runtime.txt` with `python-3.11.9` (already in repo). This avoids pydantic-core from trying to compile for Python 3.13.
+> Render build note: pin Python to 3.11 by committing `runtime.txt` at the repo root with `python-3.11.9` (already in repo). This avoids pydantic-core from trying to compile for Python 3.13.
 
 The `/api/classification` endpoint depends solely on the LLM. If the key is missing or the API call fails you will receive `503 Service Unavailable`.
 
