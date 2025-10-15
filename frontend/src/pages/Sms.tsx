@@ -121,8 +121,8 @@ function Sms() {
                     <p className="mt-3 text-xs text-slate-400">
                       {category.sample_preview}
                     </p>
-                    <footer className="mt-4 flex gap-3 text-xs text-slate-500">
-                      <span>{category.unique_senders} senders</span>
+                    <footer className="mt-4 flex flex-wrap gap-3 text-xs text-slate-500">
+                      <span>{category.unique_messages} unique messages</span>
                       <span>{category.blocked} blocked</span>
                     </footer>
                   </article>

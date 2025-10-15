@@ -12,6 +12,7 @@ export interface MessageCategorySummary {
   unique_senders: number;
   blocked: number;
   sample_preview: string;
+  unique_messages: number;
 }
 
 export interface MessageRead {

@@ -25,6 +25,7 @@ class MessageCategorySummary(BaseModel):
     unique_senders: int
     blocked: int
     sample_preview: str
+    unique_messages: int
 
 
 class MessageStats(BaseModel):

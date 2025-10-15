@@ -109,6 +109,7 @@ def _categorise_messages(messages: list[Message]) -> list[MessageCategorySummary
     for category, entries in grouped.items():
         unique_senders = {entry.sender_id for entry in entries if entry.sender_id}
         blocked = sum(1 for entry in entries if entry.blocked)
+        unique_messages = {entry.body.strip() for entry in entries}
         summaries.append(
             MessageCategorySummary(
                 category=category,
@@ -116,6 +117,7 @@ def _categorise_messages(messages: list[Message]) -> list[MessageCategorySummary
                 unique_senders=len(unique_senders),
                 blocked=blocked,
                 sample_preview=entries[0].body[:120],
+                unique_messages=len(unique_messages),
             )
         )
 
