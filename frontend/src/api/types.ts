@@ -86,3 +86,8 @@ export interface ClassificationResponse {
   category: string;
   rationale: string;
 }
+
+export interface DateRangeParams {
+  start_date?: string;
+  end_date?: string;
+}

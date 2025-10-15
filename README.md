@@ -51,9 +51,9 @@ curl -X POST http://localhost:8000/api/classification \
 ```
 
 ## Frontend Walkthrough
-- **Home**: Overall metrics + live message tester (errors if LLM unavailable).
-- **SMS**: Category breakdown, recents table with filters.
-- **Calls**: Parallel insight view for call events.
+- **Home**: Overall metrics + live message tester (errors if LLM unavailable); filter scope with a date range picker.
+- **SMS**: Category breakdown, recents table with filters (search + date range).
+- **Calls**: Parallel insight view for call events with the same date controls.
 
 ## Free Deployment Guide
 

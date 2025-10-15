@@ -1,6 +1,9 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends
+from datetime import datetime
+from typing import Optional
+
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -19,15 +22,22 @@ router = APIRouter()
 
 
 @router.get("", response_model=SmsListResponse)
-async def list_sms(session: AsyncSession = Depends(get_session)) -> SmsListResponse:
+async def list_sms(
+    start_date: Optional[datetime] = Query(None, description="ISO timestamp inclusive lower bound"),
+    end_date: Optional[datetime] = Query(None, description="ISO timestamp inclusive upper bound"),
+    session: AsyncSession = Depends(get_session),
+) -> SmsListResponse:
+    filters = _time_filters(Message.received_at, start_date, end_date)
+
     messages_result = await session.execute(
         select(Message)
         .options(selectinload(Message.sender))
+        .where(*filters)
         .order_by(Message.received_at.desc())
     )
     messages = list(messages_result.scalars())
 
-    stats = await _message_stats(session)
+    stats = await _message_stats(session, filters)
     categories = _categorise_messages(messages)
 
     recent_messages = [
@@ -53,18 +63,23 @@ async def list_sms(session: AsyncSession = Depends(get_session)) -> SmsListRespo
     )
 
 
-async def _message_stats(session: AsyncSession) -> MessageStats:
-    total_messages = await session.scalar(select(func.count(Message.id))) or 0
+async def _message_stats(session: AsyncSession, filters: tuple) -> MessageStats:
+    total_messages = await session.scalar(
+        select(func.count(Message.id)).where(*filters)
+    ) or 0
     blocked_messages = await session.scalar(
-        select(func.count()).where(Message.blocked.is_(True))
+        select(func.count()).where(Message.blocked.is_(True), *filters)
     ) or 0
     unique_senders = await session.scalar(
-        select(func.count(func.distinct(Message.sender_id))).where(Message.sender_id.is_not(None))
+        select(func.count(func.distinct(Message.sender_id))).where(
+            Message.sender_id.is_not(None), *filters
+        )
     ) or 0
 
     top_sender_number_result = await session.execute(
         select(Sender.phone_number)
         .join(Message, Sender.id == Message.sender_id)
+        .where(*filters)
         .group_by(Sender.id)
         .order_by(func.count(Message.id).desc())
         .limit(1)
@@ -109,3 +124,12 @@ def _categorise_messages(messages: list[Message]) -> list[MessageCategorySummary
         key=lambda summary: summary.total_messages,
         reverse=True,
     )
+
+
+def _time_filters(column, start_date: Optional[datetime], end_date: Optional[datetime]) -> tuple:
+    conditions = []
+    if start_date:
+        conditions.append(column >= start_date)
+    if end_date:
+        conditions.append(column <= end_date)
+    return tuple(conditions)

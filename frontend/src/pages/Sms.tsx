@@ -4,6 +4,8 @@ import { useQuery } from "@tanstack/react-query";
 import { fetchSms } from "../api/queries";
 import { MessageCategorySummary, MessageRead } from "../api/types";
 import { MetricCard } from "../components/MetricCard";
+import { DateRangeFilter } from "../components/DateRangeFilter";
+import { toDateRangeParams } from "../utils/dateRange";
 
 const formatDateTime = (input: string) =>
   new Date(input).toLocaleString(undefined, {
@@ -15,9 +17,13 @@ const formatDateTime = (input: string) =>
 
 function Sms() {
   const [searchTerm, setSearchTerm] = useState("");
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
+
+  const dateParams = toDateRangeParams(startDate, endDate);
   const { data, isLoading, isError, refetch } = useQuery({
-    queryKey: ["sms"],
-    queryFn: fetchSms,
+    queryKey: ["sms", dateParams.start_date ?? null, dateParams.end_date ?? null],
+    queryFn: () => fetchSms(dateParams),
     staleTime: 60_000
   });
 
@@ -50,7 +56,17 @@ function Sms() {
             Trend snapshots, unique spam categories, and the latest detected messages.
           </p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-col gap-3 md:flex-row md:items-end md:gap-4">
+          <DateRangeFilter
+            startDate={startDate}
+            endDate={endDate}
+            onStartDateChange={setStartDate}
+            onEndDateChange={setEndDate}
+            onClear={() => {
+              setStartDate("");
+              setEndDate("");
+            }}
+          />
           <input
             type="search"
             value={searchTerm}

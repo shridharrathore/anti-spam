@@ -4,21 +4,22 @@ import {
   ClassificationRequest,
   ClassificationResponse,
   DashboardSummary,
+  DateRangeParams,
   SmsListResponse
 } from "./types";
 
-export const fetchSummary = async (): Promise<DashboardSummary> => {
-  const { data } = await apiClient.get<DashboardSummary>("/summary");
+export const fetchSummary = async (params?: DateRangeParams): Promise<DashboardSummary> => {
+  const { data } = await apiClient.get<DashboardSummary>("/summary", { params });
   return data;
 };
 
-export const fetchSms = async (): Promise<SmsListResponse> => {
-  const { data } = await apiClient.get<SmsListResponse>("/sms");
+export const fetchSms = async (params?: DateRangeParams): Promise<SmsListResponse> => {
+  const { data } = await apiClient.get<SmsListResponse>("/sms", { params });
   return data;
 };
 
-export const fetchCalls = async (): Promise<CallListResponse> => {
-  const { data } = await apiClient.get<CallListResponse>("/calls");
+export const fetchCalls = async (params?: DateRangeParams): Promise<CallListResponse> => {
+  const { data } = await apiClient.get<CallListResponse>("/calls", { params });
   return data;
 };
 

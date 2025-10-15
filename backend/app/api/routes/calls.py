@@ -1,6 +1,9 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends
+from datetime import datetime
+from typing import Optional
+
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -14,15 +17,22 @@ router = APIRouter()
 
 
 @router.get("", response_model=CallListResponse)
-async def list_calls(session: AsyncSession = Depends(get_session)) -> CallListResponse:
+async def list_calls(
+    start_date: Optional[datetime] = Query(None, description="ISO timestamp inclusive lower bound"),
+    end_date: Optional[datetime] = Query(None, description="ISO timestamp inclusive upper bound"),
+    session: AsyncSession = Depends(get_session),
+) -> CallListResponse:
+    filters = _time_filters(Call.started_at, start_date, end_date)
+
     calls_result = await session.execute(
         select(Call)
         .options(selectinload(Call.caller))
+        .where(*filters)
         .order_by(Call.started_at.desc())
     )
     calls = list(calls_result.scalars())
 
-    stats = await _call_stats(session)
+    stats = await _call_stats(session, filters)
     categories = _categorise_calls(calls)
 
     recent_calls = [
@@ -48,18 +58,23 @@ async def list_calls(session: AsyncSession = Depends(get_session)) -> CallListRe
     )
 
 
-async def _call_stats(session: AsyncSession) -> CallStats:
-    total_calls = await session.scalar(select(func.count(Call.id))) or 0
+async def _call_stats(session: AsyncSession, filters: tuple) -> CallStats:
+    total_calls = await session.scalar(
+        select(func.count(Call.id)).where(*filters)
+    ) or 0
     blocked_calls = await session.scalar(
-        select(func.count()).where(Call.blocked.is_(True))
+        select(func.count()).where(Call.blocked.is_(True), *filters)
     ) or 0
     unique_callers = await session.scalar(
-        select(func.count(func.distinct(Call.caller_id))).where(Call.caller_id.is_not(None))
+        select(func.count(func.distinct(Call.caller_id))).where(
+            Call.caller_id.is_not(None), *filters
+        )
     ) or 0
 
     top_caller_number_result = await session.execute(
         select(Sender.phone_number)
         .join(Call, Sender.id == Call.caller_id)
+        .where(*filters)
         .group_by(Sender.id)
         .order_by(func.count(Call.id).desc())
         .limit(1)
@@ -106,3 +121,12 @@ def _categorise_calls(calls: list[Call]) -> list[CallCategorySummary]:
         key=lambda summary: summary.total_calls,
         reverse=True,
     )
+
+
+def _time_filters(column, start_date: Optional[datetime], end_date: Optional[datetime]) -> tuple:
+    conditions = []
+    if start_date:
+        conditions.append(column >= start_date)
+    if end_date:
+        conditions.append(column <= end_date)
+    return tuple(conditions)
