@@ -3,7 +3,6 @@ import { useQuery } from "@tanstack/react-query";
 
 import { fetchSummary } from "../api/queries";
 import { MetricCard } from "../components/MetricCard";
-import { TestMessageBox } from "../components/TestMessageBox";
 import { DateRangeFilter } from "../components/DateRangeFilter";
 import { toDateRangeParams } from "../utils/dateRange";
 
@@ -119,7 +118,6 @@ function Home() {
         />
       </div>
 
-      <TestMessageBox />
     </section>
   );
 }

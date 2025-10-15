@@ -3,11 +3,13 @@ import { Link, Route, Routes, useLocation } from "react-router-dom";
 import Calls from "./Calls";
 import Home from "./Home";
 import Sms from "./Sms";
+import TestLab from "./TestLab";
 
 const tabs = [
   { path: "/", label: "Home" },
   { path: "/sms", label: "SMS" },
-  { path: "/calls", label: "Calls" }
+  { path: "/calls", label: "Calls" },
+  { path: "/test", label: "Test" }
 ];
 
 function App() {
@@ -43,6 +45,7 @@ function App() {
           <Route path="/" element={<Home />} />
           <Route path="/sms" element={<Sms />} />
           <Route path="/calls" element={<Calls />} />
+          <Route path="/test" element={<TestLab />} />
         </Routes>
       </main>
     </div>
