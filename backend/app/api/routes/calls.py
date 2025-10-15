@@ -47,6 +47,7 @@ async def list_calls(
             is_spam=call.is_spam,
             confidence=call.confidence,
             blocked=call.blocked,
+            caller_is_blocked=call.caller.is_blocked if call.caller else False,
         )
         for call in calls
     ]

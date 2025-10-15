@@ -26,6 +26,7 @@ export interface MessageRead {
   is_spam: boolean;
   confidence: number | null;
   blocked: boolean;
+  sender_is_blocked: boolean;
 }
 
 export interface SmsListResponse {
@@ -61,6 +62,7 @@ export interface CallRead {
   is_spam: boolean;
   confidence: number | null;
   blocked: boolean;
+  caller_is_blocked: boolean;
 }
 
 export interface CallListResponse {
@@ -91,4 +93,11 @@ export interface ClassificationResponse {
 export interface DateRangeParams {
   start_date?: string;
   end_date?: string;
+}
+
+export interface Sender {
+  id: number;
+  phone_number: string;
+  spam_count: number;
+  is_blocked: boolean;
 }

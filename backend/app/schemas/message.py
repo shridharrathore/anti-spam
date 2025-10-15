@@ -17,6 +17,7 @@ class MessageRead(BaseModel):
     is_spam: bool
     confidence: Optional[float]
     blocked: bool
+    sender_is_blocked: bool
 
 
 class MessageCategorySummary(BaseModel):

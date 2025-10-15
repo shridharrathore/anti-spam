@@ -55,6 +55,7 @@ curl -X POST http://localhost:8000/api/classification \
 - **SMS**: Category breakdown, recents table with filters (search + date range).
 - **Calls**: Parallel insight view for call events with the same date controls.
 - **Test**: Dedicated message tester that calls the live LLM classifier.
+- **Blocking**: Block or unblock suspicious numbers directly from SMS or Call tables.
 
 ## Free Deployment Guide
 

@@ -5,6 +5,7 @@ import {
   ClassificationResponse,
   DashboardSummary,
   DateRangeParams,
+  Sender,
   SmsListResponse
 } from "./types";
 
@@ -27,5 +28,15 @@ export const classifyText = async (
   payload: ClassificationRequest
 ): Promise<ClassificationResponse> => {
   const { data } = await apiClient.post<ClassificationResponse>("/classification", payload);
+  return data;
+};
+
+export const blockSender = async (senderId: number): Promise<Sender> => {
+  const { data } = await apiClient.post<Sender>(`/senders/${senderId}/block`);
+  return data;
+};
+
+export const unblockSender = async (senderId: number): Promise<Sender> => {
+  const { data } = await apiClient.post<Sender>(`/senders/${senderId}/unblock`);
   return data;
 };

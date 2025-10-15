@@ -17,6 +17,7 @@ class CallRead(BaseModel):
     is_spam: bool
     confidence: Optional[float]
     blocked: bool
+    caller_is_blocked: bool
 
 
 class CallCategorySummary(BaseModel):

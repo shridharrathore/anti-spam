@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { fetchSms } from "../api/queries";
+import { blockSender, fetchSms, unblockSender } from "../api/queries";
 import { MessageCategorySummary, MessageRead } from "../api/types";
 import { MetricCard } from "../components/MetricCard";
 import { DateRangeFilter } from "../components/DateRangeFilter";
@@ -21,10 +21,24 @@ function Sms() {
   const [endDate, setEndDate] = useState("");
 
   const dateParams = toDateRangeParams(startDate, endDate);
+  const queryClient = useQueryClient();
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ["sms", dateParams.start_date ?? null, dateParams.end_date ?? null],
     queryFn: () => fetchSms(dateParams),
     staleTime: 60_000
+  });
+
+  const toggleBlockMutation = useMutation({
+    mutationFn: async ({ senderId, block }: { senderId: number; block: boolean }) => {
+      return block ? blockSender(senderId) : unblockSender(senderId);
+    },
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["sms"] }),
+        queryClient.invalidateQueries({ queryKey: ["summary"] }),
+        queryClient.invalidateQueries({ queryKey: ["calls"] })
+      ]);
+    }
   });
 
   const filteredMessages = useMemo(() => {
@@ -148,6 +162,7 @@ function Sms() {
                       <th className="px-4 py-3 text-left">Category</th>
                       <th className="px-4 py-3 text-left">Confidence</th>
                       <th className="px-4 py-3 text-left">Verdict</th>
+                      <th className="px-4 py-3 text-left">Number</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-800">
@@ -174,6 +189,30 @@ function Sms() {
                           >
                             {message.is_spam ? (message.blocked ? "Blocked" : "Spam") : "Clean"}
                           </span>
+                        </td>
+                        <td className="px-4 py-3 text-slate-400">
+                          {message.sender_id ? (
+                            <div className="flex items-center gap-2">
+                              <span>
+                                {message.sender_is_blocked ? "Blocked" : "Allowed"}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  toggleBlockMutation.mutate({
+                                    senderId: message.sender_id!,
+                                    block: !message.sender_is_blocked
+                                  })
+                                }
+                                disabled={toggleBlockMutation.isPending}
+                                className="rounded-full border border-slate-700 px-3 py-1 text-xs text-slate-200 transition hover:border-slate-500 hover:text-white disabled:cursor-wait disabled:opacity-60"
+                              >
+                                {message.sender_is_blocked ? "Unblock" : "Block"}
+                              </button>
+                            </div>
+                          ) : (
+                            <span className="text-slate-500">N/A</span>
+                          )}
                         </td>
                       </tr>
                     ))}

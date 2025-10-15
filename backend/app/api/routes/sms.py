@@ -52,6 +52,7 @@ async def list_sms(
             is_spam=message.is_spam,
             confidence=message.confidence,
             blocked=message.blocked,
+            sender_is_blocked=message.sender.is_blocked if message.sender else False,
         )
         for message in messages
     ]

@@ -3,7 +3,6 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from typing import Sequence
 
-from sqlalchemy import delete, func, select
 
 from app.db.base import Base
 from app.db.session import SessionLocal, engine
@@ -16,16 +15,10 @@ async def init_db() -> None:
     """Create tables and seed a richer demo dataset."""
 
     async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.drop_all)
         await conn.run_sync(Base.metadata.create_all)
 
     async with SessionLocal() as session:
-        message_count = await session.scalar(select(func.count(Message.id)))
-        if message_count and message_count > 0:
-            await session.execute(delete(Message))
-            await session.execute(delete(Call))
-            await session.execute(delete(Sender))
-            await session.commit()
-
         senders = _seed_senders()
         session.add_all(senders)
         await session.flush()
@@ -40,18 +33,23 @@ async def init_db() -> None:
 def _seed_senders() -> list[Sender]:
     now = datetime.now(timezone.utc)
     specs = [
-        ("+1555001001", 124, timedelta(minutes=5)),
-        ("+1555002002", 87, timedelta(hours=1)),
-        ("+1555003003", 58, timedelta(hours=6)),
-        ("+1555004004", 33, timedelta(days=1, hours=2)),
-        ("+1555005005", 22, timedelta(days=2)),
-        ("+1555006006", 19, timedelta(days=3, hours=5)),
-        ("+1555007007", 15, timedelta(days=4, hours=8)),
-        ("+1555008008", 9, timedelta(days=5))
+        ("+1555001001", 124, timedelta(minutes=5), True),
+        ("+1555002002", 87, timedelta(hours=1), True),
+        ("+1555003003", 58, timedelta(hours=6), False),
+        ("+1555004004", 33, timedelta(days=1, hours=2), False),
+        ("+1555005005", 22, timedelta(days=2), False),
+        ("+1555006006", 19, timedelta(days=3, hours=5), False),
+        ("+1555007007", 15, timedelta(days=4, hours=8), False),
+        ("+1555008008", 9, timedelta(days=5), False)
     ]
     return [
-        Sender(phone_number=phone, spam_count=spam_count, last_seen=now - last_seen_delta)
-        for phone, spam_count, last_seen_delta in specs
+        Sender(
+            phone_number=phone,
+            spam_count=spam_count,
+            last_seen=now - last_seen_delta,
+            is_blocked=is_blocked,
+        )
+        for phone, spam_count, last_seen_delta, is_blocked in specs
     ]
 
 
