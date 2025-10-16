@@ -114,7 +114,7 @@ function Home() {
         <MetricCard
           label="Unique spam senders"
           value={data.sms.unique_senders.toLocaleString()}
-          description="Numbers flagged in the selected window"
+          description="Distinct SMS numbers flagged"
         />
       </div>
 
@@ -148,12 +148,7 @@ function Home() {
               ) : (
                 data.sms_daily.map((entry) => (
                   <li key={entry.date} className="flex items-center justify-between">
-                    <span className="text-slate-400">
-                      {new Date(entry.date).toLocaleDateString(undefined, {
-                        month: "short",
-                        day: "numeric"
-                      })}
-                    </span>
+                    <span className="text-slate-400">{formatDateLabel(entry.date)}</span>
                     <span className="text-slate-200">
                       {entry.detected.toLocaleString()} detected · {entry.blocked.toLocaleString()} blocked
                     </span>
@@ -171,7 +166,69 @@ function Home() {
               Compare detected vs blocked spam volume day by day.
             </p>
           </header>
-          <Histograms daily={data.sms_daily} />
+          <Histograms
+            daily={data.sms_daily}
+            detectedColor="bg-primary"
+            blockedColor="bg-emerald-500/80"
+            emptyLabel="No SMS events to chart."
+          />
+        </div>
+      </div>
+
+      <div className="grid gap-6 lg:grid-cols-2">
+        <div className="space-y-4 rounded-2xl border border-slate-800 bg-slate-900/60 p-6">
+          <header className="space-y-1">
+            <h2 className="text-lg font-semibold text-slate-100">Fraud Calls</h2>
+            <p className="text-xs text-slate-500">
+              Unique callers originating spam during the selected range.
+            </p>
+          </header>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <MetricCard
+              label="Spam callers"
+              value={data.calls_unique_spam_calls.toLocaleString()}
+              description="Unique callers flagged"
+            />
+            <MetricCard
+              label="Blocked callers"
+              value={data.calls_unique_blocked_calls.toLocaleString()}
+              description="Unique callers blocked"
+            />
+          </div>
+          <div>
+            <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-400">
+              Timeline
+            </h3>
+            <ul className="mt-3 space-y-2 text-sm text-slate-300">
+              {data.calls_daily.length === 0 ? (
+                <li className="text-slate-500">No call activity in this range.</li>
+              ) : (
+                data.calls_daily.map((entry) => (
+                  <li key={`call-${entry.date}`} className="flex items-center justify-between">
+                    <span className="text-slate-400">{formatDateLabel(entry.date)}</span>
+                    <span className="text-slate-200">
+                      {entry.detected.toLocaleString()} detected · {entry.blocked.toLocaleString()} blocked
+                    </span>
+                  </li>
+                ))
+              )}
+            </ul>
+          </div>
+        </div>
+
+        <div className="space-y-6 rounded-2xl border border-slate-800 bg-slate-900/60 p-6">
+          <header className="space-y-1">
+            <h2 className="text-lg font-semibold text-slate-100">Call Histograms</h2>
+            <p className="text-xs text-slate-500">
+              Compare detected vs blocked spam call volume day by day.
+            </p>
+          </header>
+          <Histograms
+            daily={data.calls_daily}
+            detectedColor="bg-orange-500/80"
+            blockedColor="bg-rose-500/80"
+            emptyLabel="No call events to chart."
+          />
         </div>
       </div>
     </section>
@@ -179,23 +236,26 @@ function Home() {
 }
 
 function Histograms({
-  daily
+  daily,
+  detectedColor,
+  blockedColor,
+  emptyLabel
 }: {
   daily: {
     date: string;
     detected: number;
     blocked: number;
   }[];
+  detectedColor: string;
+  blockedColor: string;
+  emptyLabel: string;
 }) {
   if (daily.length === 0) {
-    return <p className="text-sm text-slate-500">No SMS events to chart.</p>;
+    return <p className="text-sm text-slate-500">{emptyLabel}</p>;
   }
 
   const maxDetected = Math.max(...daily.map((d) => d.detected), 1);
   const maxBlocked = Math.max(...daily.map((d) => d.blocked), 1);
-
-  const labelFor = (iso: string) =>
-    new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric" });
 
   const Bar = ({ value, max, color }: { value: number; max: number; color: string }) => (
     <div className="h-3 flex-1 rounded-full bg-slate-800">
@@ -213,8 +273,8 @@ function Histograms({
         <ul className="mt-3 space-y-2 text-sm">
           {daily.map((entry) => (
             <li key={`detected-${entry.date}`} className="flex items-center gap-3 text-slate-300">
-              <span className="w-14 text-xs text-slate-500">{labelFor(entry.date)}</span>
-              <Bar value={entry.detected} max={maxDetected} color="bg-primary" />
+              <span className="w-14 text-xs text-slate-500">{formatDateLabel(entry.date)}</span>
+              <Bar value={entry.detected} max={maxDetected} color={detectedColor} />
               <span className="w-10 text-right text-xs text-slate-500">{entry.detected}</span>
             </li>
           ))}
@@ -225,8 +285,8 @@ function Histograms({
         <ul className="mt-3 space-y-2 text-sm">
           {daily.map((entry) => (
             <li key={`blocked-${entry.date}`} className="flex items-center gap-3 text-slate-300">
-              <span className="w-14 text-xs text-slate-500">{labelFor(entry.date)}</span>
-              <Bar value={entry.blocked} max={maxBlocked} color="bg-emerald-500/80" />
+              <span className="w-14 text-xs text-slate-500">{formatDateLabel(entry.date)}</span>
+              <Bar value={entry.blocked} max={maxBlocked} color={blockedColor} />
               <span className="w-10 text-right text-xs text-slate-500">{entry.blocked}</span>
             </li>
           ))}
@@ -237,3 +297,6 @@ function Histograms({
 }
 
 export default Home;
+
+const formatDateLabel = (iso: string) =>
+  new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric" });

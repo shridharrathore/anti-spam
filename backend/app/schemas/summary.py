@@ -17,9 +17,18 @@ class DashboardSummary(BaseModel):
     sms_unique_spam_messages: int
     sms_unique_blocked_messages: int
     sms_daily: list["SmsDailyStat"]
+    calls_unique_spam_calls: int
+    calls_unique_blocked_calls: int
+    calls_daily: list["CallDailyStat"]
 
 
 class SmsDailyStat(BaseModel):
+    date: date
+    detected: int
+    blocked: int
+
+
+class CallDailyStat(BaseModel):
     date: date
     detected: int
     blocked: int

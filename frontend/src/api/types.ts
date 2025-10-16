@@ -80,6 +80,9 @@ export interface DashboardSummary {
   sms_unique_spam_messages: number;
   sms_unique_blocked_messages: number;
   sms_daily: SmsDailyStat[];
+  calls_unique_spam_calls: number;
+  calls_unique_blocked_calls: number;
+  calls_daily: CallDailyStat[];
 }
 
 export interface ClassificationRequest {
@@ -106,6 +109,12 @@ export interface Sender {
 }
 
 export interface SmsDailyStat {
+  date: string;
+  detected: number;
+  blocked: number;
+}
+
+export interface CallDailyStat {
   date: string;
   detected: number;
   blocked: number;
