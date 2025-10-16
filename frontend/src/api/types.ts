@@ -77,6 +77,9 @@ export interface DashboardSummary {
   calls: CallStats;
   overall_block_rate: number;
   avg_confidence: number;
+  sms_unique_spam_messages: number;
+  sms_unique_blocked_messages: number;
+  sms_daily: SmsDailyStat[];
 }
 
 export interface ClassificationRequest {
@@ -100,4 +103,10 @@ export interface Sender {
   phone_number: string;
   spam_count: number;
   is_blocked: boolean;
+}
+
+export interface SmsDailyStat {
+  date: string;
+  detected: number;
+  blocked: number;
 }

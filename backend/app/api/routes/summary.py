@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import func, select
+from sqlalchemy import Integer, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_session
@@ -13,7 +13,7 @@ from app.models.message import Message
 from app.models.sender import Sender
 from app.schemas.call import CallStats
 from app.schemas.message import MessageStats
-from app.schemas.summary import DashboardSummary
+from app.schemas.summary import DashboardSummary, SmsDailyStat
 
 router = APIRouter()
 
@@ -24,7 +24,7 @@ async def get_dashboard_summary(
     end_date: Optional[datetime] = Query(None, description="ISO timestamp inclusive upper bound"),
     session: AsyncSession = Depends(get_session),
 ) -> DashboardSummary:
-    sms_stats = await _message_stats(session, start_date, end_date)
+    sms_stats, unique_counts, daily = await _message_stats(session, start_date, end_date)
     call_stats = await _call_stats(session, start_date, end_date)
 
     total_events = sms_stats.total_messages + call_stats.total_calls
@@ -38,6 +38,9 @@ async def get_dashboard_summary(
         calls=call_stats,
         overall_block_rate=round(overall_block_rate, 3),
         avg_confidence=round(avg_confidence, 3),
+        sms_unique_spam_messages=unique_counts["spam"],
+        sms_unique_blocked_messages=unique_counts["blocked"],
+        sms_daily=daily,
     )
 
 
@@ -45,7 +48,7 @@ async def _message_stats(
     session: AsyncSession,
     start_date: Optional[datetime],
     end_date: Optional[datetime],
-) -> MessageStats:
+) -> tuple[MessageStats, dict[str, int], list[SmsDailyStat]]:
     filters = _time_filters(Message.received_at, start_date, end_date)
 
     total_messages = await session.scalar(
@@ -66,13 +69,18 @@ async def _message_stats(
         blocked_messages / total_messages if total_messages else 0.0
     )
 
-    return MessageStats(
+    stats = MessageStats(
         total_messages=total_messages,
         blocked_messages=blocked_messages,
         unique_senders=unique_senders,
         spam_percentage=round(spam_percentage, 3),
         top_sender_number=top_sender_number,
     )
+
+    unique_counts = await _unique_message_counts(session, filters)
+    daily = await _sms_daily(session, filters)
+
+    return stats, unique_counts, daily
 
 
 async def _call_stats(
@@ -166,3 +174,44 @@ def _time_filters(column, start_date: Optional[datetime], end_date: Optional[dat
     if end_date:
         conditions.append(column <= end_date)
     return tuple(conditions)
+
+
+async def _unique_message_counts(session: AsyncSession, filters: tuple) -> dict[str, int]:
+    unique_spam = await session.scalar(
+        select(func.count(func.distinct(Message.body))).where(
+            Message.is_spam.is_(True), *filters
+        )
+    )
+    unique_blocked = await session.scalar(
+        select(func.count(func.distinct(Message.body))).where(
+            Message.blocked.is_(True), *filters
+        )
+    )
+    return {
+        "spam": unique_spam or 0,
+        "blocked": unique_blocked or 0,
+    }
+
+
+async def _sms_daily(session: AsyncSession, filters: tuple) -> list[SmsDailyStat]:
+    date_column = func.date(Message.received_at)
+    query = (
+        select(
+            date_column.label("day"),
+            func.count(Message.id).label("detected"),
+            func.sum(func.cast(Message.blocked, Integer)).label("blocked"),
+        )
+        .where(*filters)
+        .group_by(date_column)
+        .order_by(date_column.asc())
+    )
+    result = await session.execute(query)
+    rows = result.all()
+    return [
+        SmsDailyStat(
+            date=row.day,
+            detected=row.detected,
+            blocked=int(row.blocked or 0),
+        )
+        for row in rows
+    ]
