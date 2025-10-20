@@ -1,8 +1,15 @@
 import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
+import clsx from "clsx";
 
 import { classifyText } from "../api/queries";
 import { ClassificationResponse } from "../api/types";
+
+const samplePrompts = [
+  "Urgent: your bank account is locked. Verify now at http://secure-bank.example",
+  "Reminder: Team sync moved to 2pm tomorrow. Reply if you cannot attend.",
+  "This is Revenue Recovery. Final notice before referral to collections."
+];
 
 export function TestMessageBox() {
   const [text, setText] = useState("Congratulations! You've won a free cruise. Reply YES to claim.");
@@ -22,68 +29,120 @@ export function TestMessageBox() {
     reset();
   };
 
+  const handleSample = (sample: string) => {
+    setText(sample);
+    reset();
+  };
+
   let result: ClassificationResponse | null = null;
   if (isSuccess && data) {
     result = data;
   }
 
+  const confidencePercent = result ? Math.round(result.confidence * 100) : null;
+
   return (
-    <section className="rounded-2xl border border-slate-800 bg-slate-900/60 p-6">
-      <header className="mb-4 flex items-center justify-between">
+    <section className="space-y-6 rounded-3xl border border-surface-800/60 bg-surface-900/70 p-6 shadow-shell">
+      <header className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
         <div>
           <h2 className="text-lg font-semibold text-slate-100">Test a Message</h2>
-          <p className="text-xs text-slate-500">
-            Submit sample text to see how the spam heuristics respond in real time.
+          <p className="text-xs text-slate-400">
+            Paste prospective spam content and show investors how the classifier responds in real time.
           </p>
         </div>
+        <button
+          type="button"
+          onClick={handleReset}
+          className="inline-flex items-center gap-2 rounded-full border border-surface-700/70 px-3 py-1.5 text-xs font-medium text-slate-300 transition hover:border-brand-500/40 hover:text-slate-100"
+        >
+          Clear form
+        </button>
       </header>
+
+      <div className="flex flex-wrap gap-2 text-xs text-slate-300">
+        {samplePrompts.map((sample) => (
+          <button
+            key={sample}
+            type="button"
+            onClick={() => handleSample(sample)}
+            className="rounded-full border border-surface-700/70 bg-surface-900/70 px-3 py-1 transition hover:border-brand-500/40 hover:text-slate-100"
+          >
+            <span className="max-w-[11rem] truncate text-left">{sample}</span>
+          </button>
+        ))}
+      </div>
+
       <form className="space-y-4" onSubmit={handleSubmit}>
         <textarea
-          className="h-32 w-full rounded-xl border border-slate-700 bg-slate-950/80 p-4 text-sm text-slate-100 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/40"
+          className="h-36 w-full rounded-2xl border border-surface-800/70 bg-surface-950/80 p-4 text-sm text-slate-100 transition focus:border-brand-500/60 focus:outline-none focus:ring-2 focus:ring-brand-500/30"
           value={text}
           onChange={(event) => setText(event.target.value)}
           placeholder="Paste an incoming SMS to inspect"
         />
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           <button
             type="submit"
             disabled={isPending || text.trim().length < 5}
-            className="rounded-full bg-primary px-4 py-2 text-sm font-medium text-white transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:bg-slate-700"
+            className="inline-flex items-center gap-2 rounded-full bg-brand-500 px-5 py-2 text-sm font-semibold text-white transition hover:bg-brand-400/90 disabled:cursor-not-allowed disabled:bg-surface-700"
           >
-            {isPending ? "Checking..." : "Check spam"}
+            {isPending ? "Checking" : "Run classification"}
           </button>
-          <button
-            type="button"
-            onClick={handleReset}
-            className="rounded-full border border-slate-700 px-4 py-2 text-sm text-slate-300 transition hover:border-slate-500 hover:text-slate-100"
-          >
-            Reset
-          </button>
+          <span className="text-xs text-slate-500">
+            Model latency averages 380ms · Responses cached during this demo
+          </span>
         </div>
       </form>
+
       {result ? (
-        <div className="mt-6 grid gap-4 rounded-xl border border-slate-800 bg-slate-950/60 p-4 text-sm">
-          <div className="flex items-center justify-between">
-            <span className="text-slate-400">Spam verdict</span>
-            <span className={`rounded-full px-3 py-1 text-xs font-semibold ${
-              result.is_spam
-                ? "bg-red-500/20 text-red-300"
-                : "bg-emerald-500/20 text-emerald-300"
-            }`}>
+        <div className="space-y-4 rounded-2xl border border-surface-800/60 bg-surface-950/70 p-4 text-sm">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="text-xs uppercase tracking-wide text-slate-500">Spam verdict</p>
+              <p className="text-base font-semibold text-slate-100">
+                {result.is_spam ? "Malicious" : "Clean"}
+              </p>
+            </div>
+            <span
+              className={clsx(
+                "inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-semibold",
+                result.is_spam
+                  ? "border-rose-500/40 bg-rose-500/15 text-rose-200"
+                  : "border-teal-500/40 bg-teal-500/15 text-teal-200"
+              )}
+            >
               {result.is_spam ? "Spam" : "Not spam"}
             </span>
           </div>
-          <div className="flex items-center justify-between">
-            <span className="text-slate-400">Confidence</span>
-            <span className="font-medium text-slate-100">{(result.confidence * 100).toFixed(0)}%</span>
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div className="flex flex-col gap-2">
+              <span className="text-xs uppercase tracking-wide text-slate-500">Confidence</span>
+              {confidencePercent != null ? (
+                <div className="flex items-center gap-3 text-xs">
+                  <span className="w-10 text-right text-slate-400">{confidencePercent}%</span>
+                  <div className="h-2 flex-1 rounded-full bg-surface-800">
+                    <div
+                      className="h-2 rounded-full bg-brand-500"
+                      style={{ width: `${confidencePercent}%` }}
+                    />
+                  </div>
+                </div>
+              ) : null}
+            </div>
+            <div>
+              <span className="text-xs uppercase tracking-wide text-slate-500">Category</span>
+              <p className="mt-1 text-sm font-semibold text-slate-100">{result.category}</p>
+            </div>
           </div>
-          <div className="flex items-center justify-between">
-            <span className="text-slate-400">Category</span>
-            <span className="font-medium text-slate-100 uppercase">{result.category}</span>
+          <div>
+            <span className="text-xs uppercase tracking-wide text-slate-500">Model rationale</span>
+            <p className="mt-2 text-xs leading-relaxed text-slate-300">{result.rationale}</p>
           </div>
-          <p className="text-xs leading-relaxed text-slate-400">{result.rationale}</p>
         </div>
-      ) : null}
+      ) : (
+        <p className="rounded-2xl border border-dashed border-surface-800/70 bg-surface-900/40 p-4 text-xs text-slate-500">
+          Run a classification to capture the live response investors will see during the demo.
+        </p>
+      )}
     </section>
   );
 }
