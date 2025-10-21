@@ -140,9 +140,6 @@ export function AppShell({ children }: AppShellProps) {
           <div className="mx-auto flex w-full max-w-6xl flex-col gap-4 px-6 py-5">
             <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
               <div className="space-y-1">
-                <div className="inline-flex items-center gap-2 rounded-full border border-brand-500/40 bg-brand-500/10 px-3 py-1 text-xs font-semibold text-brand-100">
-                  Investor preview build
-                </div>
                 <p className="text-lg font-semibold text-slate-100">
                   Fraud interception operations at a glance
                 </p>

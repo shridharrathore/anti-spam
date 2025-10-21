@@ -9,7 +9,7 @@ import {
 import clsx from "clsx";
 
 import { blockSender, fetchSms, unblockSender } from "../api/queries";
-import { MessageCategorySummary, MessageRead } from "../api/types";
+import { MessageRead } from "../api/types";
 import { MetricCard } from "../components/MetricCard";
 import { DateRangeFilter } from "../components/DateRangeFilter";
 import { toDateRangeParams } from "../utils/dateRange";
@@ -24,13 +24,100 @@ type RangePreset = (typeof rangePresets)[number];
 
 const numberFormatter = new Intl.NumberFormat();
 
-const formatDateTime = (input: string) =>
-  new Date(input).toLocaleString(undefined, {
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit"
+type SenderAggregateRow = {
+  key: string;
+  senderId: number | null;
+  senderNumber: string | null;
+  sampleBody: string;
+  totalMessages: number;
+  uniqueReceivers: number;
+  confidence: number | null;
+  verdict: "Clean" | "Spam" | "Blocked";
+  senderBlocked: boolean;
+};
+
+function aggregateMessagesBySender(messages: MessageRead[]): SenderAggregateRow[] {
+  const aggregates = new Map<
+    string,
+    {
+      senderId: number | null;
+      senderNumber: string | null;
+      sampleBody: string;
+      totalMessages: number;
+      receivers: Set<string>;
+      confidenceSum: number;
+      confidenceSamples: number;
+      spamCount: number;
+      blockedCount: number;
+      senderBlocked: boolean;
+      latestReceivedAt: string;
+    }
+  >();
+
+  for (const message of messages) {
+    const key =
+      message.sender_id != null
+        ? `id-${message.sender_id}`
+        : message.sender_number != null
+          ? `num-${message.sender_number}`
+          : `msg-${message.id}`;
+    const existing = aggregates.get(key);
+
+    if (!existing) {
+      aggregates.set(key, {
+        senderId: message.sender_id,
+        senderNumber: message.sender_number,
+        sampleBody: message.body,
+        totalMessages: 1,
+        receivers: new Set([message.receiver_number]),
+        confidenceSum: message.confidence ?? 0,
+        confidenceSamples: message.confidence != null ? 1 : 0,
+        spamCount: message.is_spam ? 1 : 0,
+        blockedCount: message.blocked ? 1 : 0,
+        senderBlocked: message.sender_is_blocked,
+        latestReceivedAt: message.received_at
+      });
+      continue;
+    }
+
+    existing.totalMessages += 1;
+    existing.receivers.add(message.receiver_number);
+    if (message.confidence != null) {
+      existing.confidenceSum += message.confidence;
+      existing.confidenceSamples += 1;
+    }
+    if (new Date(message.received_at).getTime() > new Date(existing.latestReceivedAt).getTime()) {
+      existing.sampleBody = message.body;
+      existing.latestReceivedAt = message.received_at;
+    }
+    if (message.is_spam) {
+      existing.spamCount += 1;
+    }
+    if (message.blocked) {
+      existing.blockedCount += 1;
+    }
+    existing.senderBlocked = message.sender_is_blocked;
+  }
+
+  return Array.from(aggregates.entries()).map(([key, value]) => {
+    const averageConfidence =
+      value.confidenceSamples > 0 ? value.confidenceSum / value.confidenceSamples : null;
+    const verdict: SenderAggregateRow["verdict"] =
+      value.blockedCount > 0 ? "Blocked" : value.spamCount > 0 ? "Spam" : "Clean";
+
+    return {
+      key,
+      senderId: value.senderId,
+      senderNumber: value.senderNumber,
+      sampleBody: value.sampleBody,
+      totalMessages: value.totalMessages,
+      uniqueReceivers: value.receivers.size,
+      confidence: averageConfidence,
+      verdict,
+      senderBlocked: value.senderBlocked
+    };
   });
+}
 
 function Sms() {
   const [searchTerm, setSearchTerm] = useState("");
@@ -69,12 +156,10 @@ function Sms() {
     );
   }, [data, searchTerm]);
 
-  const categories = useMemo(() => {
-    if (!data) return [] as MessageCategorySummary[];
-    if (!searchTerm.trim()) return data.categories;
-    const lower = searchTerm.toLowerCase();
-    return data.categories.filter((category) => category.category.toLowerCase().includes(lower));
-  }, [data, searchTerm]);
+  const senderAggregates = useMemo(
+    () => aggregateMessagesBySender(filteredMessages),
+    [filteredMessages]
+  );
 
   const activePreset = getActivePresetLabel(startDate, endDate);
 
@@ -188,16 +273,13 @@ function Sms() {
             />
           </div>
 
-          <div className="grid gap-6 xl:grid-cols-[minmax(0,0.9fr),minmax(0,1.1fr)]">
-            <CategoriesPanel categories={categories} />
-            <MessagesTable
-              messages={filteredMessages}
-              isLoading={toggleBlockMutation.isPending}
-              onToggle={(senderId, shouldBlock) =>
-                toggleBlockMutation.mutate({ senderId, block: shouldBlock })
-              }
-            />
-          </div>
+          <MessagesTable
+            rows={senderAggregates}
+            isLoading={toggleBlockMutation.isPending}
+            onToggle={(senderId, shouldBlock) =>
+              toggleBlockMutation.mutate({ senderId, block: shouldBlock })
+            }
+          />
         </>
       )}
     </section>
@@ -255,70 +337,13 @@ function ActiveFilters({ searchTerm, onClearSearch }: ActiveFiltersProps) {
   );
 }
 
-interface CategoriesPanelProps {
-  categories: MessageCategorySummary[];
-}
-
-function CategoriesPanel({ categories }: CategoriesPanelProps) {
-  return (
-    <div className="space-y-4 rounded-3xl border border-surface-800/60 bg-surface-900/70 p-6 shadow-shell">
-      <header className="flex items-center justify-between">
-        <div>
-          <h2 className="text-lg font-semibold text-slate-100">Categories</h2>
-          <p className="text-sm text-slate-400">What fraud themes are trending right now.</p>
-        </div>
-      </header>
-      <div className="space-y-3">
-        {categories.map((category) => {
-          const blockedRate = category.total_messages
-            ? category.blocked / category.total_messages
-            : 0;
-          return (
-            <article
-              key={category.category}
-              className="rounded-2xl border border-surface-800/60 bg-surface-900/70 p-4 transition hover:border-brand-500/40"
-            >
-              <header className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                <div>
-                  <h3 className="text-sm font-semibold text-slate-100">{category.category}</h3>
-                  <p className="text-xs text-slate-400">{category.sample_preview}</p>
-                </div>
-                <span className="inline-flex items-center gap-2 rounded-full border border-brand-500/30 bg-brand-500/10 px-3 py-1 text-xs text-brand-100">
-                  {numberFormatter.format(category.total_messages)} msgs
-                </span>
-              </header>
-              <div className="mt-4 flex flex-wrap items-center gap-4 text-xs text-slate-400">
-                <span>{numberFormatter.format(category.unique_messages)} unique messages</span>
-                <span>{numberFormatter.format(category.blocked)} blocked</span>
-                <span>{numberFormatter.format(category.unique_senders)} senders</span>
-              </div>
-              <div className="mt-4 h-2 w-full rounded-full bg-surface-800">
-                <div
-                  className="h-2 rounded-full bg-brand-500"
-                  style={{ width: `${Math.min(100, Math.round(blockedRate * 100))}%` }}
-                />
-              </div>
-              <p className="mt-2 text-xs text-slate-400">{formatPercent(blockedRate)} blocked automatically</p>
-            </article>
-          );
-        })}
-        {categories.length === 0 ? (
-          <p className="rounded-2xl border border-surface-800/60 bg-surface-900/60 p-4 text-sm text-slate-500">
-            No categories match your filter.
-          </p>
-        ) : null}
-      </div>
-    </div>
-  );
-}
-
 interface MessagesTableProps {
-  messages: MessageRead[];
+  rows: SenderAggregateRow[];
   isLoading: boolean;
   onToggle: (senderId: number, block: boolean) => void;
 }
 
-function MessagesTable({ messages, isLoading, onToggle }: MessagesTableProps) {
+function MessagesTable({ rows, isLoading, onToggle }: MessagesTableProps) {
   return (
     <div className="rounded-3xl border border-surface-800/60 bg-surface-900/70 shadow-shell">
       <header className="flex items-center justify-between border-b border-surface-800/60 px-6 py-4">
@@ -331,61 +356,69 @@ function MessagesTable({ messages, isLoading, onToggle }: MessagesTableProps) {
         <table className="min-w-full text-sm">
           <thead className="sticky top-0 z-10 bg-surface-900/90 text-xs uppercase text-slate-500 backdrop-blur">
             <tr>
-              <th className="px-4 py-3 text-left">Sender</th>
-              <th className="px-4 py-3 text-left">Received</th>
-              <th className="px-4 py-3 text-left">Category</th>
+              <th className="px-4 py-3 text-left">S-String</th>
+              <th className="px-4 py-3 text-left"># SMSes</th>
+              <th className="px-4 py-3 text-left"># Receivers</th>
               <th className="px-4 py-3 text-left">Confidence</th>
               <th className="px-4 py-3 text-left">Verdict</th>
               <th className="px-4 py-3 text-left">Number</th>
+              <th className="px-4 py-3 text-right">Block/Unblock</th>
             </tr>
           </thead>
           <tbody>
-            {messages.map((message, index) => (
+            {rows.map((row, index) => (
               <tr
-                key={message.id}
+                key={row.key}
                 className={clsx(
                   "transition hover:bg-surface-800/60",
                   index % 2 === 0 ? "bg-surface-900/40" : "bg-surface-900/20"
                 )}
               >
-                <td className="px-4 py-3 text-slate-200">
-                  <div className="flex flex-col">
-                    <span className="font-medium">{message.sender_number ?? "Unknown"}</span>
-                    <span className="text-xs text-slate-500">→ {message.receiver_number}</span>
-                  </div>
+                <td className="max-w-xs px-4 py-3 text-slate-200">
+                  <span className="block font-medium leading-snug" title={row.sampleBody}>
+                    {truncateBody(row.sampleBody)}
+                  </span>
                 </td>
-                <td className="px-4 py-3 text-slate-400">{formatDateTime(message.received_at)}</td>
-                <td className="px-4 py-3 text-slate-400">{message.category ?? "—"}</td>
-                <td className="px-4 py-3">
-                  <ConfidenceMeter value={message.confidence} />
+                <td className="px-4 py-3 text-slate-400">{numberFormatter.format(row.totalMessages)}</td>
+                <td className="px-4 py-3 text-slate-400">
+                  {numberFormatter.format(row.uniqueReceivers)}
                 </td>
                 <td className="px-4 py-3">
-                  <VerdictBadge isSpam={message.is_spam} blocked={message.blocked} />
+                  <ConfidenceMeter value={row.confidence} />
+                </td>
+                <td className="px-4 py-3">
+                  <VerdictBadge
+                    isSpam={row.verdict !== "Clean"}
+                    blocked={row.verdict === "Blocked"}
+                  />
                 </td>
                 <td className="px-4 py-3 text-slate-300">
-                  {message.sender_id ? (
-                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                      <StatusPill tone={message.sender_is_blocked ? "negative" : "positive"}>
-                        {message.sender_is_blocked ? "Blocked" : "Allowed"}
+                  {row.senderNumber ?? "Unknown"}
+                </td>
+                <td className="px-4 py-3 text-right text-slate-300">
+                  {row.senderId ? (
+                    <div className="flex flex-col items-end gap-2 sm:flex-row sm:justify-end">
+                      <StatusPill tone={row.senderBlocked ? "negative" : "positive"}>
+                        {row.senderBlocked ? "Blocked" : "Allowed"}
                       </StatusPill>
                       <button
                         type="button"
-                        onClick={() => onToggle(message.sender_id!, !message.sender_is_blocked)}
+                        onClick={() => onToggle(row.senderId!, !row.senderBlocked)}
                         disabled={isLoading}
                         className="rounded-full border border-surface-700/70 px-3 py-1 text-xs font-medium text-slate-200 transition hover:border-brand-500/40 hover:text-white disabled:cursor-wait disabled:opacity-60"
                       >
-                        {message.sender_is_blocked ? "Unblock" : "Block"}
+                        {row.senderBlocked ? "Unblock" : "Block"}
                       </button>
                     </div>
                   ) : (
-                    <span className="text-slate-500">N/A</span>
+                    <span className="text-xs text-slate-500">Unavailable</span>
                   )}
                 </td>
               </tr>
             ))}
-            {messages.length === 0 ? (
+            {rows.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-4 py-10 text-center text-sm text-slate-500">
+                <td colSpan={7} className="px-4 py-10 text-center text-sm text-slate-500">
                   No messages match your query.
                 </td>
               </tr>
@@ -395,6 +428,13 @@ function MessagesTable({ messages, isLoading, onToggle }: MessagesTableProps) {
       </div>
     </div>
   );
+}
+
+function truncateBody(input: string, maxLength = 120) {
+  const trimmed = input.trim();
+  if (!trimmed) return "—";
+  if (trimmed.length <= maxLength) return trimmed;
+  return `${trimmed.slice(0, maxLength - 3)}...`;
 }
 
 interface StatusPillProps {

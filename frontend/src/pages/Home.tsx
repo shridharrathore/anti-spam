@@ -249,8 +249,8 @@ function Home() {
         />
       </div>
 
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.4fr),minmax(0,1fr)]">
-        <article className="space-y-6 rounded-3xl border border-surface-800/60 bg-surface-900/70 p-6 shadow-shell">
+      <div className="grid items-stretch gap-6 xl:grid-cols-[minmax(0,1.4fr),minmax(0,1fr)]">
+        <article className="flex h-full flex-col gap-6 rounded-3xl border border-surface-800/60 bg-surface-900/70 p-6 shadow-shell">
           <header className="space-y-1">
             <h2 className="text-lg font-semibold text-slate-100">Unique Fraud SMS</h2>
             <p className="text-sm text-slate-400">Deduplicated by template across the selected window.</p>
@@ -283,19 +283,19 @@ function Home() {
           />
         </article>
 
-        <article className="rounded-3xl border border-surface-800/60 bg-surface-900/70 p-6 shadow-shell">
+        <article className="flex h-full flex-col rounded-3xl border border-surface-800/60 bg-surface-900/70 p-6 shadow-shell">
           <header className="space-y-1">
             <h2 className="text-lg font-semibold text-slate-100">SMS volume by outcome</h2>
             <p className="text-sm text-slate-400">Compare detected vs blocked traffic each day.</p>
           </header>
-          <div className="mt-6">
+          <div className="mt-6 flex-1">
             <VolumeAreaChart data={smsChartData} emptyLabel="No SMS events to chart." />
           </div>
         </article>
       </div>
 
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.4fr),minmax(0,1fr)]">
-        <article className="space-y-6 rounded-3xl border border-surface-800/60 bg-surface-900/70 p-6 shadow-shell">
+      <div className="grid items-stretch gap-6 xl:grid-cols-[minmax(0,1.4fr),minmax(0,1fr)]">
+        <article className="flex h-full flex-col gap-6 rounded-3xl border border-surface-800/60 bg-surface-900/70 p-6 shadow-shell">
           <header className="space-y-1">
             <h2 className="text-lg font-semibold text-slate-100">Fraud Calls</h2>
             <p className="text-sm text-slate-400">Unique callers originating spam this period.</p>
@@ -327,12 +327,12 @@ function Home() {
           />
         </article>
 
-        <article className="rounded-3xl border border-surface-800/60 bg-surface-900/70 p-6 shadow-shell">
+        <article className="flex h-full flex-col rounded-3xl border border-surface-800/60 bg-surface-900/70 p-6 shadow-shell">
           <header className="space-y-1">
             <h2 className="text-lg font-semibold text-slate-100">Call volume by outcome</h2>
             <p className="text-sm text-slate-400">Detected vs blocked voice spam per day.</p>
           </header>
-          <div className="mt-6">
+          <div className="mt-6 flex-1">
             <VolumeAreaChart data={callChartData} emptyLabel="No call events to chart." detectedColor="#f97316" blockedColor="#fb7185" />
           </div>
         </article>
@@ -349,27 +349,29 @@ interface TimelineListProps {
 
 function TimelineList({ title, emptyCopy, data }: TimelineListProps) {
   return (
-    <div>
+    <div className="flex min-h-0 flex-1 flex-col">
       <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">{title}</h3>
-      <ul className="mt-4 space-y-3">
-        {data.length === 0 ? (
-          <li className="rounded-2xl border border-surface-800/60 bg-surface-900/60 px-4 py-5 text-sm text-slate-500">
-            {emptyCopy}
-          </li>
-        ) : (
-          data.map((entry) => (
-            <li
-              key={entry.date}
-              className="flex items-center justify-between rounded-2xl border border-surface-800/60 bg-surface-900/60 px-4 py-3 text-sm text-slate-300"
-            >
-              <span className="text-slate-400">{formatDateLabel(entry.date)}</span>
-              <span className="font-medium text-slate-200">
-                {numberFormatter.format(entry.detected)} detected · {numberFormatter.format(entry.blocked)} blocked
-              </span>
+      <div className="mt-4 max-h-64 flex-1 overflow-y-auto pr-1">
+        <ul className="space-y-3">
+          {data.length === 0 ? (
+            <li className="rounded-2xl border border-surface-800/60 bg-surface-900/60 px-4 py-5 text-sm text-slate-500">
+              {emptyCopy}
             </li>
-          ))
-        )}
-      </ul>
+          ) : (
+            data.map((entry) => (
+              <li
+                key={entry.date}
+                className="flex items-center justify-between rounded-2xl border border-surface-800/60 bg-surface-900/60 px-4 py-3 text-sm text-slate-300"
+              >
+                <span className="text-slate-400">{formatDateLabel(entry.date)}</span>
+                <span className="font-medium text-slate-200">
+                  {numberFormatter.format(entry.detected)} detected · {numberFormatter.format(entry.blocked)} blocked
+                </span>
+              </li>
+            ))
+          )}
+        </ul>
+      </div>
     </div>
   );
 }

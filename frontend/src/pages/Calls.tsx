@@ -9,7 +9,7 @@ import {
 import clsx from "clsx";
 
 import { blockSender, fetchCalls, unblockSender } from "../api/queries";
-import { CallCategorySummary, CallRead } from "../api/types";
+import { CallRead } from "../api/types";
 import { MetricCard } from "../components/MetricCard";
 import { DateRangeFilter } from "../components/DateRangeFilter";
 import { toDateRangeParams } from "../utils/dateRange";
@@ -23,6 +23,119 @@ const rangePresets = [
 type RangePreset = (typeof rangePresets)[number];
 
 const numberFormatter = new Intl.NumberFormat();
+
+type CallerAggregateRow = {
+  key: string;
+  callerId: number | null;
+  callerNumber: string | null;
+  latestReceiver: string | null;
+  latestStartedAt: string | null;
+  uniqueReceivers: number;
+  averageDurationSeconds: number;
+  confidence: number | null;
+  verdict: "Clean" | "Spam" | "Blocked";
+  callerBlocked: boolean;
+};
+
+function aggregateCallsByCaller(calls: CallRead[]): CallerAggregateRow[] {
+  const aggregates = new Map<
+    string,
+    {
+      callerId: number | null;
+      callerNumber: string | null;
+      latestReceiver: string | null;
+      latestStartedAt: string | null;
+      uniqueReceivers: Set<string>;
+      durationTotal: number;
+      callCount: number;
+      confidenceSum: number;
+      confidenceSamples: number;
+      spamCount: number;
+      blockedCount: number;
+      callerBlocked: boolean;
+    }
+  >();
+
+  for (const call of calls) {
+    const key =
+      call.caller_id != null
+        ? `id-${call.caller_id}`
+        : call.caller_number != null
+          ? `num-${call.caller_number}`
+          : `call-${call.id}`;
+
+    const existing = aggregates.get(key);
+    if (!existing) {
+      aggregates.set(key, {
+        callerId: call.caller_id,
+        callerNumber: call.caller_number,
+        latestReceiver: call.callee_number,
+        latestStartedAt: call.started_at,
+        uniqueReceivers: new Set(call.callee_number ? [call.callee_number] : []),
+        durationTotal: call.duration_seconds,
+        callCount: 1,
+        confidenceSum: call.confidence ?? 0,
+        confidenceSamples: call.confidence != null ? 1 : 0,
+        spamCount: call.is_spam ? 1 : 0,
+        blockedCount: call.blocked ? 1 : 0,
+        callerBlocked: call.caller_is_blocked
+      });
+      continue;
+    }
+
+    existing.callCount += 1;
+    existing.durationTotal += call.duration_seconds;
+    if (call.callee_number) {
+      existing.uniqueReceivers.add(call.callee_number);
+    }
+    if (call.confidence != null) {
+      existing.confidenceSum += call.confidence;
+      existing.confidenceSamples += 1;
+    }
+    if (
+      call.started_at &&
+      (!existing.latestStartedAt ||
+        new Date(call.started_at).getTime() > new Date(existing.latestStartedAt).getTime())
+    ) {
+      existing.latestStartedAt = call.started_at;
+      existing.latestReceiver = call.callee_number;
+    }
+    if (call.is_spam) {
+      existing.spamCount += 1;
+    }
+    if (call.blocked) {
+      existing.blockedCount += 1;
+    }
+    existing.callerBlocked = call.caller_is_blocked;
+  }
+
+  return Array.from(aggregates.entries())
+    .map(([key, value]) => {
+      const averageConfidence =
+        value.confidenceSamples > 0 ? value.confidenceSum / value.confidenceSamples : null;
+      const verdict: CallerAggregateRow["verdict"] =
+        value.blockedCount > 0 ? "Blocked" : value.spamCount > 0 ? "Spam" : "Clean";
+
+      return {
+        key,
+        callerId: value.callerId,
+        callerNumber: value.callerNumber,
+        latestReceiver: value.latestReceiver ?? null,
+        latestStartedAt: value.latestStartedAt,
+        uniqueReceivers: value.uniqueReceivers.size,
+        averageDurationSeconds:
+          value.callCount > 0 ? value.durationTotal / value.callCount : 0,
+        confidence: averageConfidence,
+        verdict,
+        callerBlocked: value.callerBlocked
+      };
+    })
+    .sort((a, b) => {
+      const aTime = a.latestStartedAt ? new Date(a.latestStartedAt).getTime() : 0;
+      const bTime = b.latestStartedAt ? new Date(b.latestStartedAt).getTime() : 0;
+      return bTime - aTime;
+    });
+}
 
 const formatDateTime = (input: string) =>
   new Date(input).toLocaleString(undefined, {
@@ -76,12 +189,10 @@ function Calls() {
     );
   }, [data, searchTerm]);
 
-  const categories = useMemo(() => {
-    if (!data) return [] as CallCategorySummary[];
-    if (!searchTerm.trim()) return data.categories;
-    const lower = searchTerm.toLowerCase();
-    return data.categories.filter((category) => category.category.toLowerCase().includes(lower));
-  }, [data, searchTerm]);
+  const callerAggregates = useMemo(
+    () => aggregateCallsByCaller(filteredCalls),
+    [filteredCalls]
+  );
 
   const activePreset = getActivePresetLabel(startDate, endDate);
 
@@ -195,16 +306,13 @@ function Calls() {
             />
           </div>
 
-          <div className="grid gap-6 xl:grid-cols-[minmax(0,0.9fr),minmax(0,1.1fr)]">
-            <CategoriesPanel categories={categories} />
-            <CallsTable
-              calls={filteredCalls}
-              isLoading={toggleBlockMutation.isPending}
-              onToggle={(callerId, shouldBlock) =>
-                toggleBlockMutation.mutate({ senderId: callerId, block: shouldBlock })
-              }
-            />
-          </div>
+          <CallsTable
+            rows={callerAggregates}
+            isLoading={toggleBlockMutation.isPending}
+            onToggle={(callerId, shouldBlock) =>
+              toggleBlockMutation.mutate({ senderId: callerId, block: shouldBlock })
+            }
+          />
         </>
       )}
     </section>
@@ -262,67 +370,13 @@ function ActiveFilters({ searchTerm, onClearSearch }: ActiveFiltersProps) {
   );
 }
 
-interface CategoriesPanelProps {
-  categories: CallCategorySummary[];
-}
-
-function CategoriesPanel({ categories }: CategoriesPanelProps) {
-  return (
-    <div className="space-y-4 rounded-3xl border border-surface-800/60 bg-surface-900/70 p-6 shadow-shell">
-      <header className="flex items-center justify-between">
-        <div>
-          <h2 className="text-lg font-semibold text-slate-100">Categories</h2>
-          <p className="text-sm text-slate-400">Segments driving fraudulent call activity.</p>
-        </div>
-      </header>
-      <div className="space-y-3">
-        {categories.map((category) => {
-          const blockedRate = category.total_calls ? category.blocked / category.total_calls : 0;
-          return (
-            <article
-              key={category.category}
-              className="rounded-2xl border border-surface-800/60 bg-surface-900/70 p-4 transition hover:border-teal-500/40"
-            >
-              <header className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                <div>
-                  <h3 className="text-sm font-semibold text-slate-100">{category.category}</h3>
-                  <p className="text-xs text-slate-400">{category.sample_preview}</p>
-                </div>
-                <span className="inline-flex items-center gap-2 rounded-full border border-teal-500/30 bg-teal-500/10 px-3 py-1 text-xs text-teal-200">
-                  {numberFormatter.format(category.total_calls)} calls
-                </span>
-              </header>
-              <div className="mt-4 flex flex-wrap items-center gap-4 text-xs text-slate-400">
-                <span>{numberFormatter.format(category.unique_callers)} callers</span>
-                <span>{numberFormatter.format(category.blocked)} blocked</span>
-              </div>
-              <div className="mt-4 h-2 w-full rounded-full bg-surface-800">
-                <div
-                  className="h-2 rounded-full bg-teal-400"
-                  style={{ width: `${Math.min(100, Math.round(blockedRate * 100))}%` }}
-                />
-              </div>
-              <p className="mt-2 text-xs text-slate-400">{formatPercent(blockedRate)} blocked automatically</p>
-            </article>
-          );
-        })}
-        {categories.length === 0 ? (
-          <p className="rounded-2xl border border-surface-800/60 bg-surface-900/60 p-4 text-sm text-slate-500">
-            No categories match your filter.
-          </p>
-        ) : null}
-      </div>
-    </div>
-  );
-}
-
 interface CallsTableProps {
-  calls: CallRead[];
+  rows: CallerAggregateRow[];
   isLoading: boolean;
   onToggle: (callerId: number, block: boolean) => void;
 }
 
-function CallsTable({ calls, isLoading, onToggle }: CallsTableProps) {
+function CallsTable({ rows, isLoading, onToggle }: CallsTableProps) {
   return (
     <div className="rounded-3xl border border-surface-800/60 bg-surface-900/70 shadow-shell">
       <header className="flex items-center justify-between border-b border-surface-800/60 px-6 py-4">
@@ -335,19 +389,19 @@ function CallsTable({ calls, isLoading, onToggle }: CallsTableProps) {
         <table className="min-w-full text-sm">
           <thead className="sticky top-0 z-10 bg-surface-900/90 text-xs uppercase text-slate-500 backdrop-blur">
             <tr>
-              <th className="px-4 py-3 text-left">Caller</th>
-              <th className="px-4 py-3 text-left">Time</th>
-              <th className="px-4 py-3 text-left">Duration</th>
-              <th className="px-4 py-3 text-left">Category</th>
+              <th className="px-4 py-3 text-left">Suspect</th>
+              <th className="px-4 py-3 text-left"># Call Receivers</th>
+              <th className="px-4 py-3 text-left">Avg Duration</th>
               <th className="px-4 py-3 text-left">Confidence</th>
               <th className="px-4 py-3 text-left">Verdict</th>
               <th className="px-4 py-3 text-left">Number</th>
+              <th className="px-4 py-3 text-right">Block/Unblock</th>
             </tr>
           </thead>
           <tbody>
-            {calls.map((call, index) => (
+            {rows.map((row, index) => (
               <tr
-                key={call.id}
+                key={row.key}
                 className={clsx(
                   "transition hover:bg-surface-800/60",
                   index % 2 === 0 ? "bg-surface-900/40" : "bg-surface-900/20"
@@ -355,41 +409,56 @@ function CallsTable({ calls, isLoading, onToggle }: CallsTableProps) {
               >
                 <td className="px-4 py-3 text-slate-200">
                   <div className="flex flex-col">
-                    <span className="font-medium">{call.caller_number ?? "Unknown"}</span>
-                    <span className="text-xs text-slate-500">→ {call.callee_number}</span>
+                    <span className="font-medium">
+                      {row.latestReceiver ? `Target → ${row.latestReceiver}` : "Target unknown"}
+                    </span>
+                    {row.latestStartedAt ? (
+                      <span className="text-xs text-slate-500">
+                        {formatDateTime(row.latestStartedAt)}
+                      </span>
+                    ) : null}
                   </div>
                 </td>
-                <td className="px-4 py-3 text-slate-400">{formatDateTime(call.started_at)}</td>
-                <td className="px-4 py-3 text-slate-400">{formatDuration(call.duration_seconds)}</td>
-                <td className="px-4 py-3 text-slate-400">{call.category ?? "—"}</td>
-                <td className="px-4 py-3">
-                  <ConfidenceMeter value={call.confidence} />
+                <td className="px-4 py-3 text-slate-400">
+                  {numberFormatter.format(row.uniqueReceivers)}
+                </td>
+                <td className="px-4 py-3 text-slate-400">
+                  {formatDuration(Math.round(row.averageDurationSeconds))}
                 </td>
                 <td className="px-4 py-3">
-                  <VerdictBadge isSpam={call.is_spam} blocked={call.blocked} />
+                  <ConfidenceMeter value={row.confidence} />
+                </td>
+                <td className="px-4 py-3">
+                  <VerdictBadge
+                    isSpam={row.verdict !== "Clean"}
+                    blocked={row.verdict === "Blocked"}
+                  />
                 </td>
                 <td className="px-4 py-3 text-slate-300">
-                  {call.caller_id ? (
-                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                      <StatusPill tone={call.caller_is_blocked ? "negative" : "positive"}>
-                        {call.caller_is_blocked ? "Blocked" : "Allowed"}
+                  {row.callerNumber ?? "Unknown"}
+                </td>
+                <td className="px-4 py-3 text-right text-slate-300">
+                  {row.callerId ? (
+                    <div className="flex flex-col items-end gap-2 sm:flex-row sm:justify-end">
+                      <StatusPill tone={row.callerBlocked ? "negative" : "positive"}>
+                        {row.callerBlocked ? "Blocked" : "Allowed"}
                       </StatusPill>
                       <button
                         type="button"
-                        onClick={() => onToggle(call.caller_id!, !call.caller_is_blocked)}
+                        onClick={() => onToggle(row.callerId!, !row.callerBlocked)}
                         disabled={isLoading}
                         className="rounded-full border border-surface-700/70 px-3 py-1 text-xs font-medium text-slate-200 transition hover:border-teal-500/40 hover:text-white disabled:cursor-wait disabled:opacity-60"
                       >
-                        {call.caller_is_blocked ? "Unblock" : "Block"}
+                        {row.callerBlocked ? "Unblock" : "Block"}
                       </button>
                     </div>
                   ) : (
-                    <span className="text-slate-500">N/A</span>
+                    <span className="text-xs text-slate-500">Unavailable</span>
                   )}
                 </td>
               </tr>
             ))}
-            {calls.length === 0 ? (
+            {rows.length === 0 ? (
               <tr>
                 <td colSpan={7} className="px-4 py-10 text-center text-sm text-slate-500">
                   No calls match your query.
