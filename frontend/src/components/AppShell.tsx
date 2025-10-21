@@ -80,7 +80,7 @@ export function AppShell({ children }: AppShellProps) {
             <ShieldCheckIcon className="h-6 w-6" />
           </span>
           <div className="leading-tight">
-            <span className="text-xs uppercase tracking-[0.35em] text-slate-500">AntiSpam</span>
+            <span className="text-xs uppercase tracking-[0.35em] text-slate-300">AntiSpam</span>
             <p className="text-lg font-semibold text-slate-100">Signal Ops Console</p>
           </div>
         </div>
@@ -112,7 +112,7 @@ export function AppShell({ children }: AppShellProps) {
                 </span>
                 <span className="flex flex-col">
                   <span className="text-sm font-medium">{item.label}</span>
-                  <span className="text-xs text-slate-500">{item.description}</span>
+                  <span className="text-xs text-slate-300">{item.description}</span>
                 </span>
               </Link>
             );
@@ -125,11 +125,11 @@ export function AppShell({ children }: AppShellProps) {
               <SignalIcon className="h-5 w-5" />
             </span>
             <div>
-              <p className="text-xs uppercase tracking-wide text-slate-500">Environment</p>
-              <p className="text-sm font-medium text-slate-100">{environmentLabel} mode</p>
+              <p className="text-xs uppercase tracking-wide text-slate-300">Environment</p>
+              <p className="text-sm font-medium text-slate-50">{environmentLabel} mode</p>
             </div>
           </div>
-          <p className="mt-3 text-xs text-slate-500">
+          <p className="mt-3 text-xs text-slate-400">
             API endpoints proxied via <code className="rounded bg-surface-800/60 px-1.5 py-0.5 text-[0.7rem]">{import.meta.env.VITE_API_BASE_URL ?? "not set"}</code>
           </p>
         </div>
