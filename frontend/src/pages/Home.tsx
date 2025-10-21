@@ -4,6 +4,9 @@ import {
   Area,
   AreaChart,
   CartesianGrid,
+  Cell,
+  Pie,
+  PieChart,
   ResponsiveContainer,
   Tooltip,
   TooltipProps,
@@ -122,6 +125,21 @@ function Home() {
 
   const smsChartData = toChartPoints(data.sms_daily);
   const callChartData = toChartPoints(data.calls_daily);
+  const smsTemplateTotal = data.sms_unique_spam_messages;
+  const smsTemplateBlocked = Math.min(data.sms_unique_blocked_messages, smsTemplateTotal);
+  const smsTemplateClean = Math.max(smsTemplateTotal - smsTemplateBlocked, 0);
+  const smsTemplatePie = [
+    { name: "Spam templates", value: smsTemplateBlocked },
+    { name: "Other templates", value: smsTemplateClean }
+  ];
+
+  const callUniqueNumbers = data.calls.unique_callers;
+  const callFraudNumbers = Math.min(data.calls_unique_spam_calls, callUniqueNumbers);
+  const callSafeNumbers = Math.max(callUniqueNumbers - callFraudNumbers, 0);
+  const callVolumePie = [
+    { name: "Fraud callers", value: callFraudNumbers },
+    { name: "Other callers", value: callSafeNumbers }
+  ];
 
   return (
     <section className="space-y-12">
@@ -291,6 +309,14 @@ function Home() {
           <div className="mt-6 flex-1">
             <VolumeAreaChart data={smsChartData} emptyLabel="No SMS events to chart." />
           </div>
+          <ComparisonPieChart
+            title="Template mix"
+            data={smsTemplatePie}
+            colors={["#f97316", "#38bdf8"]}
+            total={smsTemplateTotal}
+            totalDescription="Unique S strings"
+            emptyLabel="No template activity in this range."
+          />
         </article>
       </div>
 
@@ -335,6 +361,14 @@ function Home() {
           <div className="mt-6 flex-1">
             <VolumeAreaChart data={callChartData} emptyLabel="No call events to chart." detectedColor="#f97316" blockedColor="#fb7185" />
           </div>
+          <ComparisonPieChart
+            title="Caller mix"
+            data={callVolumePie}
+            colors={["#fb7185", "#38bdf8"]}
+            total={callUniqueNumbers}
+            totalDescription="Unique numbers"
+            emptyLabel="No caller activity in this range."
+          />
         </article>
       </div>
     </section>
@@ -450,6 +484,105 @@ function VolumeTooltip({ active, payload, label }: TooltipProps<ValueType, NameT
           </li>
         ))}
       </ul>
+    </div>
+  );
+}
+
+interface ComparisonPieChartProps {
+  title: string;
+  data: { name: string; value: number }[];
+  colors: string[];
+  total: number;
+  totalDescription: string;
+  emptyLabel: string;
+  valueFormatter?: (value: number) => string;
+}
+
+function ComparisonPieChart({
+  title,
+  data,
+  colors,
+  total,
+  totalDescription,
+  emptyLabel,
+  valueFormatter = (value: number) => numberFormatter.format(value)
+}: ComparisonPieChartProps) {
+  const nonZeroData = data.filter((entry) => entry.value > 0);
+  const totalValue = nonZeroData.reduce((sum, entry) => sum + entry.value, 0);
+
+  if (totalValue === 0) {
+    return (
+      <div className="mt-6 rounded-2xl border border-surface-800/60 bg-surface-900/60 p-4 text-sm text-slate-500">
+        {emptyLabel}
+      </div>
+    );
+  }
+
+  const tooltipContent = ({ active, payload }: TooltipProps<ValueType, NameType>) => {
+    if (!active || !payload || payload.length === 0) return null;
+    const entry = payload[0];
+    const name = entry.name as string;
+    const value =
+      typeof entry.value === "number" ? entry.value : Number(entry.value ?? 0);
+
+    return (
+      <div className="rounded-xl border border-surface-800/70 bg-surface-900/90 px-3 py-2 text-xs text-slate-200 shadow-shell">
+        <p className="text-[0.65rem] uppercase tracking-wide text-slate-500">{name}</p>
+        <p className="mt-1 text-sm font-semibold text-slate-100">{valueFormatter(value)}</p>
+      </div>
+    );
+  };
+
+  return (
+    <div className="mt-6 rounded-2xl border border-surface-800/60 bg-surface-900/60 p-4">
+      <header className="mb-4">
+        <h3 className="text-sm font-semibold text-slate-200">{title}</h3>
+      </header>
+      <div className="flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
+        <div className="relative mx-auto h-40 w-40">
+          <ResponsiveContainer width="100%" height="100%">
+            <PieChart>
+              <Pie
+                data={nonZeroData}
+                dataKey="value"
+                innerRadius="60%"
+                outerRadius="80%"
+                paddingAngle={4}
+                stroke="transparent"
+              >
+                {nonZeroData.map((_, index) => (
+                  <Cell key={index} fill={colors[index % colors.length]} />
+                ))}
+              </Pie>
+              <Tooltip content={tooltipContent} />
+            </PieChart>
+          </ResponsiveContainer>
+          <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center text-center">
+            <span className="text-[0.65rem] uppercase tracking-wide text-slate-500">{totalDescription}</span>
+            <span className="text-lg font-semibold text-slate-100">
+              {valueFormatter(total)}
+            </span>
+          </div>
+        </div>
+        <ul className="flex-1 space-y-2 text-sm text-slate-300">
+          {nonZeroData.map((entry, index) => (
+            <li
+              key={entry.name}
+              className="flex items-center justify-between gap-6 rounded-xl border border-surface-800/60 bg-surface-900/60 px-3 py-2"
+            >
+              <span className="inline-flex items-center gap-2">
+                <span
+                  className="h-2.5 w-2.5 rounded-full"
+                  style={{ backgroundColor: colors[index % colors.length] }}
+                  aria-hidden
+                />
+                {entry.name}
+              </span>
+              <span className="font-semibold text-slate-100">{valueFormatter(entry.value)}</span>
+            </li>
+          ))}
+        </ul>
+      </div>
     </div>
   );
 }
